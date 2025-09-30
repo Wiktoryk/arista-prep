@@ -47,7 +47,9 @@ public:
         if (next - tail.load(std::memory_order_acquire) > Capacity - 1) {
             return false;
         }
-        new (&storage[head_loaded & Mask]) T(std::forward<Args>(args)...);
+        std::size_t idx = (head_loaded & Mask);
+        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
+        std::construct_at(slot, std::forward<Args>(args)...);
         head.store(next, std::memory_order_release);
         return true;
     }
@@ -57,9 +59,10 @@ public:
         if (tail_loaded == head.load(std::memory_order_acquire)) {
             return false;
         }
-        T* slot = reinterpret_cast<T*>(&storage[tail_loaded & Mask]);
+        std::size_t idx = (tail_loaded & Mask);
+        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
         out = std::move(*slot);
-        slot->~T();
+        std::destroy_at(slot);
         tail.store(tail_loaded + 1, std::memory_order_release);
         return true;
     }
@@ -69,9 +72,10 @@ public:
         if (tail_loaded == head.load(std::memory_order_acquire)) {
             return std::nullopt;
         }
-        T* slot = reinterpret_cast<T*>(&storage[tail_loaded & Mask]);
+        std::size_t idx = (tail_loaded & Mask);
+        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
         std::optional<T> ret{std::move(*slot)};
-        slot->~T();
+        std::destroy_at(slot);
         tail.store(tail_loaded + 1, std::memory_order_release);
         return ret;
     }
