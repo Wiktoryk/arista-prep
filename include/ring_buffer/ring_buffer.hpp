@@ -23,6 +23,7 @@ template <typename T, std::size_t CapacityPow2>
 class SpscRingBuffer {
     static_assert(is_power_of_two(CapacityPow2), "CapacityPow2 must be a power of two");
     static_assert(CapacityPow2 >= 2, "CapacityPow2 must be >= 2");
+    using self_t = SpscRingBuffer<T, CapacityPow2>;
 
     static constexpr std::size_t Capacity = CapacityPow2;
     static constexpr std::size_t Mask = CapacityPow2 - 1;
@@ -96,21 +97,23 @@ public:
         return Capacity;
     }
 
-    void clear() noexcept {
-        T drain;
-        while (!this->empty()) {
-            this->pop(drain);
+    void clear() noexcept(noexcept(std::declval<self_t &>().try_pop())) {
+        while (true) {
+            auto v = this->try_pop();
+            if (!v) {
+                break;
+            }
         }
     }
 
-    bool peek(T& out) const noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
+    bool peek(T& out) const noexcept(std::is_nothrow_copy_assignable_v<T> || std::is_nothrow_copy_constructible_v<T>) {
         const auto tail_loaded = tail.load(std::memory_order_relaxed);
         if (tail_loaded == head.load(std::memory_order_acquire)) {
             return false;
         }
-        std::size_t idx = (tail_loaded & Mask);
-        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
-        out = std::move(*slot);
+        const std::size_t idx = (tail_loaded & Mask);
+        auto* slot = reinterpret_cast<const T*>(&storage[idx * sizeof(T)]);
+        out = *slot;
         return true;
     }
 
