@@ -145,8 +145,39 @@ public:
         return to_pop;
     }
 
-    bool emplace_bulk(T&& elements...) {
-        return false;
+    template<class InputIt>
+    std::size_t emplace_bulk(InputIt first, InputIt last) noexcept(noexcept(std::declval<T&>() = *first) || std::is_nothrow_move_constructible_v<T>) {
+        const auto head_loaded = head.load(std::memory_order_relaxed);
+        const auto tail_loaded = tail.load((std::memory_order_acquire));
+        const std::size_t used = head_loaded - tail_loaded;
+        const std::size_t free_slots = Capacity - 1 - used;
+        if (free_slots == 0) {
+            return 0;
+        }
+        std::size_t want_to_push = 0;
+        for (auto it = first; it != last; ++it) {
+            ++want_to_push;
+        }
+        if (want_to_push == 0) {
+            return 0;
+        }
+        const std::size_t to_push = (want_to_push < free_slots) ? want_to_push : free_slots;
+        std::size_t idx = (head_loaded & Mask);
+        std::size_t first_run = ((Capacity - idx) < to_push) ? (Capacity - idx) : to_push;
+
+        {
+            auto it = first;
+            for (std::size_t i = 0; i < first_run; ++i, ++it) {
+                auto* slot = reinterpret_cast<T*>(&storage[(idx + i) * sizeof(T)]);
+                std::construct_at(slot, *it);
+            }
+            for (std::size_t i = 0; i < to_push - first_run; ++i, ++it) {
+                auto* slot = reinterpret_cast<T*>(&storage[i * sizeof(T)]);
+                std::construct_at(slot, *it);
+            }
+        }
+        head.store(head_loaded + to_push, std::memory_order_release);
+        return to_push;
     }
 
 private:

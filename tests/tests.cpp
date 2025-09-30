@@ -65,7 +65,8 @@ int main() {
 
     {
         rb::SpscRingBuffer<int, 4> q;
-        assert(q.emplace_bulk(1,2,3));
+        int v[3] {1,2,3};
+        assert(q.emplace_bulk(v, v+3));
     }
     return 0;
 }
