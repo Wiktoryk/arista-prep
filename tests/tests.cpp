@@ -40,5 +40,12 @@ int main() {
         assert(!q.pop(v));
     }
 
+    {
+        rb::SpscRingBuffer<int, 2> q;
+        assert(q.emplace(1));
+        q.clear();
+        assert(q.empty());
+    }
+
     return 0;
 }

@@ -63,7 +63,7 @@ public:
         auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
         out = std::move(*slot);
         std::destroy_at(slot);
-        tail.store(tail_loaded + 1, std::memory_order_release);
+        tail.store(tail_loaded + 1, std::memory_order_acquire);
         return true;
     }
 
@@ -76,7 +76,7 @@ public:
         auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
         std::optional<T> ret{std::move(*slot)};
         std::destroy_at(slot);
-        tail.store(tail_loaded + 1, std::memory_order_release);
+        tail.store(tail_loaded + 1, std::memory_order_acquire);
         return ret;
     }
 
@@ -94,6 +94,13 @@ public:
 
     static constexpr std::size_t capacity() noexcept {
         return Capacity;
+    }
+
+    void clear() noexcept {
+        T drain;
+        while (!this->empty()) {
+            this->pop(drain);
+        }
     }
 
 private:
