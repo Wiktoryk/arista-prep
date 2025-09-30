@@ -67,7 +67,7 @@ public:
         return true;
     }
 
-    std::optional<T> try_pop() {
+    std::optional<T> try_pop() noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
         const auto tail_loaded = tail.load(std::memory_order_relaxed);
         if (tail_loaded == head.load(std::memory_order_acquire)) {
             return std::nullopt;
@@ -101,6 +101,34 @@ public:
         while (!this->empty()) {
             this->pop(drain);
         }
+    }
+
+    bool peek(T& out) const noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
+        const auto tail_loaded = tail.load(std::memory_order_relaxed);
+        if (tail_loaded == head.load(std::memory_order_acquire)) {
+            return false;
+        }
+        std::size_t idx = (tail_loaded & Mask);
+        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
+        out = std::move(*slot);
+        return true;
+    }
+
+    bool pop_bulk(T& outs...) noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
+        const auto tail_loaded = tail.load(std::memory_order_relaxed);
+        if (tail_loaded == head.load(std::memory_order_acquire)) {
+            return false;
+        }
+        std::size_t idx = (tail_loaded & Mask);
+        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
+        out = std::move(*slot);
+        std::destroy_at(slot);
+        tail.store(tail_loaded + 1, std::memory_order_acquire);
+        return true;
+    }
+
+    bool emplace_bulk(T&& elements...) {
+        return false;
     }
 
 private:

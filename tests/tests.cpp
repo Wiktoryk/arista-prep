@@ -42,10 +42,30 @@ int main() {
 
     {
         rb::SpscRingBuffer<int, 2> q;
-        assert(q.emplace(1));
+        assert(q.push(1));
         q.clear();
         assert(q.empty());
     }
 
+    {
+        rb::SpscRingBuffer<int, 2> q;
+        assert(q.push(1));
+        int v;
+        assert(q.peek(v) && v == 1);
+    }
+
+    {
+        rb::SpscRingBuffer<int, 4> q;
+        for(int i{}; i < 3; i++) {
+            assert(q.push(i));
+        }
+        int v1,v2;
+        assert(q.pop_bulk(v1,v2) && v1 == 0 && v2 == 1);
+    }
+
+    {
+        rb::SpscRingBuffer<int, 4> q;
+        assert(q.emplace_bulk(1,2,3));
+    }
     return 0;
 }
