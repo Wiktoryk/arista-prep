@@ -64,11 +64,11 @@ public:
         auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
         out = std::move(*slot);
         std::destroy_at(slot);
-        tail.store(tail_loaded + 1, std::memory_order_acquire);
+        tail.store(tail_loaded + 1, std::memory_order_release);
         return true;
     }
 
-    std::optional<T> try_pop() noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
+    std::optional<T> try_pop() noexcept(std::is_nothrow_move_constructible_v<T>) {
         const auto tail_loaded = tail.load(std::memory_order_relaxed);
         if (tail_loaded == head.load(std::memory_order_acquire)) {
             return std::nullopt;
@@ -77,7 +77,7 @@ public:
         auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
         std::optional<T> ret{std::move(*slot)};
         std::destroy_at(slot);
-        tail.store(tail_loaded + 1, std::memory_order_acquire);
+        tail.store(tail_loaded + 1, std::memory_order_release);
         return ret;
     }
 
@@ -117,17 +117,32 @@ public:
         return true;
     }
 
-    bool pop_bulk(T& outs...) noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
+    std::size_t pop_bulk(T* out, std::size_t max_n) noexcept(std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>) {
         const auto tail_loaded = tail.load(std::memory_order_relaxed);
-        if (tail_loaded == head.load(std::memory_order_acquire)) {
-            return false;
+        const auto head_loaded = head.load(std::memory_order_acquire);
+        const std::size_t available = head_loaded - tail_loaded;
+        if (available == 0 || max_n == 0) {
+            return 0;
         }
+        std::size_t to_pop = (available < max_n) ? available : max_n;
         std::size_t idx = (tail_loaded & Mask);
-        auto* slot = reinterpret_cast<T*>(&storage[idx * sizeof(T)]);
-        out = std::move(*slot);
-        std::destroy_at(slot);
-        tail.store(tail_loaded + 1, std::memory_order_acquire);
-        return true;
+        std::size_t first = ((Capacity - idx) < to_pop) ? (Capacity - idx) : to_pop;
+
+        for (std::size_t i = 0; i < first; ++i) {
+            auto* slot = reinterpret_cast<T*>(&storage[(idx + i) * sizeof(T)]);
+            out[i] = std::move(*slot);
+            std::destroy_at(slot);
+        }
+        std::size_t popped = first;
+        if (popped < to_pop) {
+            for (std::size_t i = 0; i < to_pop - first; ++i) {
+                auto* slot = reinterpret_cast<T*>(&storage[i * sizeof(T)]);
+                out[popped + i] = std::move(*slot);
+                std::destroy_at(slot);
+            }
+        }
+        tail.store(tail_loaded + to_pop, std::memory_order_release);
+        return to_pop;
     }
 
     bool emplace_bulk(T&& elements...) {

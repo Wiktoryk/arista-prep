@@ -59,8 +59,8 @@ int main() {
         for(int i{}; i < 3; i++) {
             assert(q.push(i));
         }
-        int v1,v2;
-        assert(q.pop_bulk(v1,v2) && v1 == 0 && v2 == 1);
+        int v[2];
+        assert(q.pop_bulk(v,2) == 2 && v[0] == 0 && v[1] == 1);
     }
 
     {
